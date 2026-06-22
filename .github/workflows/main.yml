@@ -1,0 +1,58 @@
+name: Build ld64
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            llvm \
+            libstdc++-12-dev \
+            libdispatch-dev \
+            libBlocksRuntime-dev \
+            libssl-dev \
+            libplist-dev \
+            git \
+            cmake
+      
+      - name: Clone cctools-port
+        run: |
+          git clone --depth=1 https://github.com/tpoechtrager/cctools-port.git
+      
+      - name: Configure cctools
+        run: |
+          cd cctools-port/cctools
+          ./configure --target=aarch64-apple-darwin --enable-tapi-support=no
+      
+      - name: Build ld64
+        run: |
+          cd cctools-port/cctools
+          make -C ld64 -j$(nproc)
+      
+      - name: Check build result
+        run: |
+          if [ -f "cctools-port/cctools/ld64/ld64" ]; then
+            echo "✅ ld64 编译成功！"
+            file cctools-port/cctools/ld64/ld64
+          else
+            echo "❌ ld64 编译失败"
+            exit 1
+          fi
+      
+      - name: Upload ld64 binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ld64-linux-x86_64
+          path: cctools-port/cctools/ld64/ld64
+          retention-days: 90
