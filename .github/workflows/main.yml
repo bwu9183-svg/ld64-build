@@ -19,21 +19,23 @@ jobs:
           cd cctools-port/cctools
           ./configure --target=aarch64-apple-darwin --enable-tapi-support=no
           
+          # 用 Python 将 dispatch_apply 替换为普通 for 循环
           python3 -c "
-          import os
-          header = '#include <dispatch/dispatch.h>\n#ifndef DISPATCH_APPLY_AUTO\n#define DISPATCH_APPLY_AUTO (dispatch_get_global_queue(0, 0))\n#endif\n'
+          import os, re
+          def fix_dispatch(content):
+              content = re.sub(r'dispatch_apply\((\w+\.size\(\)), DISPATCH_APPLY_AUTO, \^\(size_t index\) \{', r'for (size_t index = 0; index < \1; index++) {', content)
+              content = re.sub(r'\s*\}\);', ' }', content)
+              return content
           for root, dirs, files in os.walk('ld64'):
               for f in files:
                   if f.endswith('.cpp') or f.endswith('.c'):
                       path = os.path.join(root, f)
                       with open(path, 'r') as fh:
                           content = fh.read()
-                      if 'DISPATCH_APPLY_AUTO' in content:
+                      if 'dispatch_apply' in content:
                           print('Fixing: ' + path)
-                          content = header + content
-                          content = content.replace(', ^(', ', [&](')
                           with open(path, 'w') as fh:
-                              fh.write(content)
+                              fh.write(fix_dispatch(content))
           "
           
           make -C libstuff -j$(nproc)
