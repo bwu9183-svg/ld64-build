@@ -16,18 +16,27 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
-            clang \
-            llvm \
+            clang-14 \
+            llvm-14 \
             libstdc++-11-dev \
             libdispatch-dev \
             libssl-dev \
             libplist-dev \
             git \
             cmake
+          
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-14 100
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-14 100
       
       - name: Clone cctools-port
         run: |
           git clone --depth=1 https://github.com/tpoechtrager/cctools-port.git
+      
+      - name: Fix code_dedup.cpp block capture issue
+        run: |
+          cd cctools-port/cctools/ld64/src/ld/passes
+          sed -i 's/std::unordered_map<const ld::Atom\*, const ld::Atom\*>::const_iterator pos;/__block std::unordered_map<const ld::Atom*, const ld::Atom*>::const_iterator pos;/g' code_dedup.cpp
+          sed -i 's/for (ld::Fixup::iterator fit = atom->fixupsBegin()/__block ld::Fixup::iterator fit = atom->fixupsBegin()/g' code_dedup.cpp
       
       - name: Configure cctools
         run: |
