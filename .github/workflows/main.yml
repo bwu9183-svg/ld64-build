@@ -19,24 +19,30 @@ jobs:
           cd cctools-port/cctools
           ./configure --target=aarch64-apple-darwin --enable-tapi-support=no
           
-          # 编译所有依赖库
           make -C libstuff -j$(nproc)
           make -C libmacho -j$(nproc)
           make -C ld64/src/3rd -j$(nproc)
           make -C ld64/src/mach_o -j$(nproc)
+          make -C ld64 -j$(nproc)
           
-          # 编译 ld64
-          make -C ld64 -j$(nproc) 2>&1 | tail -50
+          echo "=== 检查 ld64 文件 ==="
+          find . -name "ld64" -type f
+          find . -name "ld" -type f
           
-          # 检查结果
           if [ -f "ld64/ld64" ]; then
-            echo "✅ ld64 编译成功！"
             cp ld64/ld64 /tmp/ld64
+          elif [ -f "ld64/src/ld/ld" ]; then
+            cp ld64/src/ld/ld /tmp/ld64
+          else
+            echo "❌ ld64 未找到"
+            exit 1
           fi
       
       - name: Upload artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ld64-binary
           path: /tmp/ld64
           retention-days: 90
+          if-no-files-found: warn
