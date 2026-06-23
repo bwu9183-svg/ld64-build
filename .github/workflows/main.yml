@@ -18,21 +18,35 @@ jobs:
           git clone --depth=1 https://github.com/tpoechtrager/cctools-port.git
           cd cctools-port/cctools
           
-          # 配置
           ./configure --target=aarch64-apple-darwin --enable-tapi-support=no
           
-          # 修复 Block 捕获问题
-          sed -i 's/dispatch_apply(_state.sections.size(), DISPATCH_APPLY_AUTO, ^/dispatch_apply(_state.sections.size(), DISPATCH_APPLY_AUTO, [&, this]^/g' ld64/src/ld/passes/order.cpp
-          sed -i 's/dispatch_apply(state.sections.size(), DISPATCH_APPLY_AUTO, ^/dispatch_apply(state.sections.size(), DISPATCH_APPLY_AUTO, [\&]^/g' ld64/src/ld/passes/code_dedup.cpp
+          # 使用 Python 精确修复 Block 语法
+          python3 << 'PYEOF'
+          import re
           
-          # 编译
+          # 修复 order.cpp
+          with open('ld64/src/ld/passes/order.cpp', 'r') as f:
+              content = f.read()
+          content = content.replace('DISPATCH_APPLY_AUTO, ^(size_t', 'DISPATCH_APPLY_AUTO, [&, this](size_t')
+          with open('ld64/src/ld/passes/order.cpp', 'w') as f:
+              f.write(content)
+          
+          # 修复 code_dedup.cpp
+          with open('ld64/src/ld/passes/code_dedup.cpp', 'r') as f:
+              content = f.read()
+          content = content.replace('DISPATCH_APPLY_AUTO, ^(size_t', 'DISPATCH_APPLY_AUTO, [&](size_t')
+          with open('ld64/src/ld/passes/code_dedup.cpp', 'w') as f:
+              f.write(content)
+          
+          print("✅ 代码修复完成")
+          PYEOF
+          
           make -C libstuff -j$(nproc)
           make -C libmacho -j$(nproc)
           make -C ld64/src/3rd -j$(nproc)
           make -C ld64/src/mach_o -j$(nproc)
           make -C ld64 -j$(nproc)
           
-          # 检查结果
           if [ -f "ld64/ld64" ]; then
             echo "✅ ld64 编译成功！"
             cp ld64/ld64 /tmp/ld64
