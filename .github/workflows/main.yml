@@ -19,12 +19,14 @@ jobs:
           cd cctools-port/cctools
           ./configure --target=aarch64-apple-darwin --enable-tapi-support=no
           
-          # 修改 Makefile 跳过 passes 目录
-          sed -i 's/SUBDIRS = parsers passes/SUBDIRS = parsers/' ld64/src/ld/Makefile
-          
-          # 创建空的 libPasses.a
-          mkdir -p ld64/src/ld/passes/.libs
-          ar cr ld64/src/ld/passes/.libs/libPasses.a
+          # 查找并修复所有包含 DISPATCH_APPLY_AUTO 的文件
+          for f in $(grep -rl "DISPATCH_APPLY_AUTO" ld64/ 2>/dev/null); do
+            echo "Fixing $f..."
+            # 添加 DISPATCH_APPLY_AUTO 定义
+            sed -i "1i #include <dispatch/dispatch.h>\n#ifndef DISPATCH_APPLY_AUTO\n#define DISPATCH_APPLY_AUTO (dispatch_get_global_queue(0, 0))\n#endif" "$f"
+            # 将 Block 语法替换为 Lambda
+            sed -i 's/, ^(/, [&](/g' "$f"
+          done
           
           # 编译
           make -C libstuff -j$(nproc)
