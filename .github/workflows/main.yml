@@ -11,7 +11,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential clang llvm libdispatch-dev uuid-dev libssl-dev libplist-dev libblocksruntime-dev
+          sudo apt-get install -y build-essential clang llvm libdispatch-dev uuid-dev libssl-dev libplist-dev libblocksruntime-dev python3
         
       - name: Build ld64
         run: |
@@ -20,15 +20,35 @@ jobs:
           
           ./configure --target=aarch64-apple-darwin --enable-tapi-support=no
           
-          # 直接注释掉有问题的 dispatch_apply 代码
-          sed -i '/dispatch_apply(_state.sections.size/,/^        });/s/^/\/\//' ld64/src/ld/passes/order.cpp
-          sed -i '/dispatch_apply(state.sections.size/,/^    });/s/^/\/\//' ld64/src/ld/passes/code_dedup.cpp
+          # 使用 Python 精确修复 Block 语法
+          python3 /dev/stdin << 'PYEOF'
+          import re
+          
+          def fix_blocks(filepath):
+              with open(filepath, 'r') as f:
+                  content = f.read()
+              
+              # 添加 DISPATCH_APPLY_AUTO 定义
+              header = '#ifndef DISPATCH_APPLY_AUTO\n#define DISPATCH_APPLY_AUTO ((dispatch_queue_priority_t)0)\n#endif\n\n'
+              content = header + content
+              
+              # 将 Apple Block ^{ 替换为 Lambda [&]{
+              content = content.replace(', ^(', ', [&](')
+              
+              with open(filepath, 'w') as f:
+                  f.write(content)
+              
+              print(f"Fixed: {filepath}")
+          
+          fix_blocks('ld64/src/ld/passes/order.cpp')
+          fix_blocks('ld64/src/ld/passes/code_dedup.cpp')
+          PYEOF
           
           make -C libstuff -j$(nproc)
           make -C libmacho -j$(nproc)
           make -C ld64/src/3rd -j$(nproc)
           make -C ld64/src/mach_o -j$(nproc)
-          make -C ld64 -j$(nproc) 2>&1 | tail -20
+          make -C ld64 -j$(nproc) 2>&1 | tail -30
           
           if [ -f "ld64/ld64" ]; then
             echo "✅ ld64 编译成功！"
