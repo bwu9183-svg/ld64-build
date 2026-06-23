@@ -19,16 +19,23 @@ jobs:
           cd cctools-port/cctools
           ./configure --target=aarch64-apple-darwin --enable-tapi-support=no
           
-          # 查找并修复所有包含 DISPATCH_APPLY_AUTO 的文件
-          for f in $(grep -rl "DISPATCH_APPLY_AUTO" ld64/ 2>/dev/null); do
-            echo "Fixing $f..."
-            # 添加 DISPATCH_APPLY_AUTO 定义
-            sed -i "1i #include <dispatch/dispatch.h>\n#ifndef DISPATCH_APPLY_AUTO\n#define DISPATCH_APPLY_AUTO (dispatch_get_global_queue(0, 0))\n#endif" "$f"
-            # 将 Block 语法替换为 Lambda
-            sed -i 's/, ^(/, [&](/g' "$f"
-          done
+          python3 -c "
+          import os
+          header = '#include <dispatch/dispatch.h>\n#ifndef DISPATCH_APPLY_AUTO\n#define DISPATCH_APPLY_AUTO (dispatch_get_global_queue(0, 0))\n#endif\n'
+          for root, dirs, files in os.walk('ld64'):
+              for f in files:
+                  if f.endswith('.cpp') or f.endswith('.c'):
+                      path = os.path.join(root, f)
+                      with open(path, 'r') as fh:
+                          content = fh.read()
+                      if 'DISPATCH_APPLY_AUTO' in content:
+                          print('Fixing: ' + path)
+                          content = header + content
+                          content = content.replace(', ^(', ', [&](')
+                          with open(path, 'w') as fh:
+                              fh.write(content)
+          "
           
-          # 编译
           make -C libstuff -j$(nproc)
           make -C libmacho -j$(nproc)
           make -C ld64/src/3rd -j$(nproc)
