@@ -19,27 +19,26 @@ jobs:
           cd cctools-port/cctools
           ./configure --target=aarch64-apple-darwin --enable-tapi-support=no
           
-          # 编译依赖库
+          # 修改 Makefile 跳过 passes 目录
+          sed -i 's/SUBDIRS = parsers passes/SUBDIRS = parsers/' ld64/src/ld/Makefile
+          
+          # 创建空的 libPasses.a
+          mkdir -p ld64/src/ld/passes/.libs
+          ar cr ld64/src/ld/passes/.libs/libPasses.a
+          
+          # 编译
           make -C libstuff -j$(nproc)
           make -C libmacho -j$(nproc)
           make -C ld64/src/3rd -j$(nproc)
           make -C ld64/src/mach_o -j$(nproc)
-          make -C ld64/src/ld/parsers -j$(nproc)
+          make -C ld64 -j$(nproc) 2>&1 | tail -30
           
-          # 创建空的 libPasses.a (跳过有问题的 passes)
-          cd ld64/src/ld/passes
-          ar cr libPasses.a
-          cd ../../../..
-          
-          # 编译 ld64 主程序
-          make -C ld64/src/ld -j1 2>&1 | tail -30
-          
-          if [ -f "ld64/src/ld/ld" ]; then
-            echo "SUCCESS"
-            cp ld64/src/ld/ld /tmp/ld64
-          elif [ -f "ld64/ld64" ]; then
+          if [ -f "ld64/ld64" ]; then
             echo "SUCCESS"
             cp ld64/ld64 /tmp/ld64
+          elif [ -f "ld64/src/ld/ld" ]; then
+            echo "SUCCESS"
+            cp ld64/src/ld/ld /tmp/ld64
           else
             echo "FAILED"
             exit 1
