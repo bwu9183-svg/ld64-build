@@ -17,21 +17,32 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/tpoechtrager/cctools-port.git
           cd cctools-port/cctools
+          
+          # 修复 1: 定义 DISPATCH_APPLY_AUTO
+          echo '#ifndef DISPATCH_APPLY_AUTO
+          #define DISPATCH_APPLY_AUTO ((dispatch_queue_priority_t)0)
+          #endif' >> include/foreign/dispatch/dispatch.h
+          
+          # 修复 2: 修复 Block 捕获问题
+          sed -i 's/dispatch_apply(_state.sections.size(), DISPATCH_APPLY_AUTO, ^/dispatch_apply(_state.sections.size(), DISPATCH_APPLY_AUTO, [&, this]^/g' ld64/src/ld/passes/order.cpp
+          sed -i 's/dispatch_apply(state.sections.size(), DISPATCH_APPLY_AUTO, ^/dispatch_apply(state.sections.size(), DISPATCH_APPLY_AUTO, [\&]^/g' ld64/src/ld/passes/code_dedup.cpp
+          
+          # 配置
           ./configure --target=aarch64-apple-darwin --enable-tapi-support=no
           
+          # 编译
           make -C libstuff -j$(nproc)
           make -C libmacho -j$(nproc)
           make -C ld64/src/3rd -j$(nproc)
           make -C ld64/src/mach_o -j$(nproc)
           make -C ld64 -j$(nproc)
           
-          echo "=== 检查 ld64 文件 ==="
-          find . -name "ld64" -type f
-          find . -name "ld" -type f
-          
+          # 检查结果
           if [ -f "ld64/ld64" ]; then
+            echo "✅ ld64 编译成功！"
             cp ld64/ld64 /tmp/ld64
           elif [ -f "ld64/src/ld/ld" ]; then
+            echo "✅ ld 编译成功！"
             cp ld64/src/ld/ld /tmp/ld64
           else
             echo "❌ ld64 未找到"
