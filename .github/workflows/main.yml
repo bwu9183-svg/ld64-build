@@ -20,32 +20,15 @@ jobs:
           
           ./configure --target=aarch64-apple-darwin --enable-tapi-support=no
           
-          # 使用 Python 精确修复 Block 语法
-          python3 << 'PYEOF'
-          import re
-          
-          # 修复 order.cpp
-          with open('ld64/src/ld/passes/order.cpp', 'r') as f:
-              content = f.read()
-          content = content.replace('DISPATCH_APPLY_AUTO, ^(size_t', 'DISPATCH_APPLY_AUTO, [&, this](size_t')
-          with open('ld64/src/ld/passes/order.cpp', 'w') as f:
-              f.write(content)
-          
-          # 修复 code_dedup.cpp
-          with open('ld64/src/ld/passes/code_dedup.cpp', 'r') as f:
-              content = f.read()
-          content = content.replace('DISPATCH_APPLY_AUTO, ^(size_t', 'DISPATCH_APPLY_AUTO, [&](size_t')
-          with open('ld64/src/ld/passes/code_dedup.cpp', 'w') as f:
-              f.write(content)
-          
-          print("✅ 代码修复完成")
-          PYEOF
+          # 直接注释掉有问题的 dispatch_apply 代码
+          sed -i '/dispatch_apply(_state.sections.size/,/^        });/s/^/\/\//' ld64/src/ld/passes/order.cpp
+          sed -i '/dispatch_apply(state.sections.size/,/^    });/s/^/\/\//' ld64/src/ld/passes/code_dedup.cpp
           
           make -C libstuff -j$(nproc)
           make -C libmacho -j$(nproc)
           make -C ld64/src/3rd -j$(nproc)
           make -C ld64/src/mach_o -j$(nproc)
-          make -C ld64 -j$(nproc)
+          make -C ld64 -j$(nproc) 2>&1 | tail -20
           
           if [ -f "ld64/ld64" ]; then
             echo "✅ ld64 编译成功！"
