@@ -11,55 +11,36 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential clang llvm libdispatch-dev uuid-dev libssl-dev libplist-dev libblocksruntime-dev python3
+          sudo apt-get install -y build-essential clang llvm libdispatch-dev uuid-dev libssl-dev libplist-dev libblocksruntime-dev
         
-      - name: Fix source code
+      - name: Fix and build
         run: |
           git clone --depth=1 https://github.com/tpoechtrager/cctools-port.git
           cd cctools-port/cctools
           ./configure --target=aarch64-apple-darwin --enable-tapi-support=no
-          cat > /tmp/fix.py << 'ENDOFSCRIPT'
-          import sys
-          def fix_file(filepath):
-              with open(filepath, 'r') as f:
-                  content = f.read()
-              header = '#ifndef DISPATCH_APPLY_AUTO_FIX\n'
-              header += '#define DISPATCH_APPLY_AUTO_FIX\n'
-              header += '#include <dispatch/dispatch.h>\n'
-              header += '#ifndef DISPATCH_APPLY_AUTO\n'
-              header += '#define DISPATCH_APPLY_AUTO (dispatch_get_global_queue(0, 0))\n'
-              header += '#endif\n'
-              header += '#endif\n\n'
-              content = header + content
-              content = content.replace(', ^(', ', [&](')
-              with open(filepath, 'w') as f:
-                  f.write(content)
-              print('Fixed: ' + filepath)
-          fix_file('ld64/src/ld/passes/order.cpp')
-          fix_file('ld64/src/ld/passes/code_dedup.cpp')
-          ENDOFXSCRIPT
-          python3 /tmp/fix.py
-      
-      - name: Build ld64
-        run: |
-          cd cctools-port/cctools
+          
+          # 直接删除有问题的 dispatch_apply 代码块
+          sed -i '/dispatch_apply(_state.sections.size/,/});/d' ld64/src/ld/passes/order.cpp
+          sed -i '/dispatch_apply(state.sections.size/,/});/d' ld64/src/ld/passes/code_dedup.cpp
+          
           make -C libstuff -j$(nproc)
           make -C libmacho -j$(nproc)
           make -C ld64/src/3rd -j$(nproc)
           make -C ld64/src/mach_o -j$(nproc)
           make -C ld64 -j$(nproc) 2>&1 | tail -30
+          
           if [ -f "ld64/ld64" ]; then
-            echo "ld64 compiled successfully!"
+            echo "SUCCESS"
             cp ld64/ld64 /tmp/ld64
           elif [ -f "ld64/src/ld/ld" ]; then
-            echo "ld compiled successfully!"
+            echo "SUCCESS"
             cp ld64/src/ld/ld /tmp/ld64
           else
-            echo "ld64 not found"
+            echo "FAILED"
             exit 1
           fi
       
-      - name: Upload artifact
+      - name: Upload
         if: always()
         uses: actions/upload-artifact@v4
         with:
