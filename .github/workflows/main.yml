@@ -1,4 +1,4 @@
-name: Build ld64 Simple
+name: Build ld64
 
 on:
   workflow_dispatch:
@@ -11,45 +11,32 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git cmake clang llvm libdispatch-dev libomp-dev
-      
-      - name: Clone and build ld64
+          sudo apt-get install -y build-essential clang llvm libdispatch-dev uuid-dev libssl-dev libplist-dev
+        
+      - name: Build ld64
         run: |
           git clone --depth=1 https://github.com/tpoechtrager/cctools-port.git
           cd cctools-port/cctools
           ./configure --target=aarch64-apple-darwin --enable-tapi-support=no
-          cd ld64/src/ld
           
-          clang++ -O2 -std=c++17 -fblocks -D__arm64__ -D__DARWIN_UNIX03 -D__LITTLE_ENDIAN__=1 \
-            -I../../../../include -I../../../../include/foreign \
-            -I../../../../ld64/src -I../../../../ld64/src/abstraction \
-            -I../../../../ld64/src/3rd -I../../../../ld64/src/3rd/include \
-            -I../../../../ld64/src/ld -I../../../../ld64/src/ld/parsers \
-            -I../../../../ld64/src/ld/passes -I../../../../ld64/src/mach_o \
-            -Wno-everything -c \
-            Options.cpp InputFiles.cpp OutputFile.cpp Resolver.cpp ld.cpp \
-            SymbolTable.cpp FatFile.cpp Mangling.cpp ResponseFiles.cpp \
-            PlatformSupport.cpp Snapshot.cpp debugline.c
+          # 编译所有依赖库
+          make -C libstuff -j$(nproc)
+          make -C libmacho -j$(nproc)
+          make -C ld64/src/3rd -j$(nproc)
+          make -C ld64/src/mach_o -j$(nproc)
           
-          clang++ -o ld64 \
-            Options.o InputFiles.o OutputFile.o Resolver.o ld.o \
-            SymbolTable.o FatFile.o Mangling.o ResponseFiles.o \
-            PlatformSupport.o Snapshot.o debugline.o \
-            ../3rd/.libs/libhelper.a \
-            -lstdc++ -lpthread -ldl -lm -ldispatch
+          # 编译 ld64
+          make -C ld64 -j$(nproc) 2>&1 | tail -50
           
-          if [ -f "ld64" ]; then
+          # 检查结果
+          if [ -f "ld64/ld64" ]; then
             echo "✅ ld64 编译成功！"
-            file ld64
-            cp ld64 /tmp/ld64
-          else
-            echo "❌ ld64 编译失败"
-            exit 1
+            cp ld64/ld64 /tmp/ld64
           fi
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ld64
+          name: ld64-binary
           path: /tmp/ld64
           retention-days: 90
